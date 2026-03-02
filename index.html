@@ -3,14 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Мессенджер RP</title>
+  <title>Мессенджер RP 2026</title>
+  
+  <!-- Firebase SDK -->
   <script type="module">
-    // Firebase SDKs
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
     import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
     import { getDatabase, ref, push, onChildAdded } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
-    // Firebase config
     const firebaseConfig = {
       apiKey: "AIzaSyDo5ji0ABgf5lIwFCW5uJjx_aGt-u-MnHQ",
       authDomain: "forum-rp-project.firebaseapp.com",
@@ -22,12 +22,10 @@
       measurementId: "G-TG5J3DXX90"
     };
 
-    // Initialize Firebase
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const db = getDatabase(app);
 
-    // DOM elements
     window.addEventListener('DOMContentLoaded', () => {
       const email = document.getElementById("email");
       const password = document.getElementById("password");
@@ -38,70 +36,98 @@
       const messageInput = document.getElementById("messageInput");
       const sendBtn = document.getElementById("sendBtn");
 
-      // Registration
       registerBtn.onclick = () => {
         createUserWithEmailAndPassword(auth, email.value, password.value)
           .catch(err => alert(err.message));
       }
 
-      // Login
       loginBtn.onclick = () => {
         signInWithEmailAndPassword(auth, email.value, password.value)
           .catch(err => alert(err.message));
       }
 
-      // Auth state
       onAuthStateChanged(auth, user => {
         if(user) {
-          chatDiv.style.display = "block";
+          chatDiv.style.display = "flex";
           loadMessages();
         } else {
           chatDiv.style.display = "none";
         }
       });
 
-      // Send message
       sendBtn.onclick = () => {
         if(messageInput.value.trim() !== "") {
           push(ref(db, "messages"), {
             text: messageInput.value,
-            uid: auth.currentUser.uid
+            uid: auth.currentUser.uid,
+            timestamp: Date.now()
           });
           messageInput.value = "";
         }
       }
 
-      // Load messages
       function loadMessages() {
         onChildAdded(ref(db, "messages"), snapshot => {
           const msg = snapshot.val();
-          const p = document.createElement("p");
+          const p = document.createElement("div");
+          p.className = "message";
           p.textContent = msg.text;
           messagesDiv.appendChild(p);
+          messagesDiv.scrollTop = messagesDiv.scrollHeight;
         });
       }
     });
   </script>
+
+  <!-- Стили -->
   <style>
-    body { font-family: Arial; padding: 20px; background: #121212; color: #eee; }
-    input { padding: 5px; margin: 5px; }
-    button { padding: 5px 10px; margin: 5px; }
-    #chat { display: none; margin-top: 20px; }
-    #messages p { background: #1c1c1c; padding: 5px; border-radius: 5px; margin: 3px 0; }
+    /* Общие */
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', sans-serif; background: #121212; color: #eee; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; min-height: 100vh; padding: 20px; }
+    
+    h1 { margin-bottom: 20px; color: #00BFFF; }
+
+    /* Вход и регистрация */
+    .auth-container {
+      display: flex; flex-direction: column; align-items: center; gap: 10px;
+      margin-bottom: 30px;
+    }
+    input { padding: 12px 15px; border-radius: 12px; border: none; outline: none; background: #1E1E1E; color: #eee; width: 250px; transition: 0.2s; }
+    input:focus { background: #292929; box-shadow: 0 0 8px #00BFFF; }
+    button { padding: 12px 20px; border-radius: 12px; border: none; cursor: pointer; background: #00BFFF; color: #121212; font-weight: bold; transition: 0.2s; }
+    button:hover { background: #0091EA; }
+
+    /* Чат */
+    #chat { display: none; flex-direction: column; width: 100%; max-width: 400px; height: 500px; border-radius: 20px; background: #1E1E1E; padding: 20px; box-shadow: 0 0 20px rgba(0,191,255,0.2); }
+    #messages { flex: 1; overflow-y: auto; margin-bottom: 15px; display: flex; flex-direction: column; gap: 8px; }
+    .message { padding: 10px 15px; border-radius: 15px; background: #292929; max-width: 80%; word-wrap: break-word; transition: 0.2s; }
+    .message:hover { background: #333; }
+
+    /* Поле ввода */
+    .input-row { display: flex; gap: 10px; }
+    #messageInput { flex: 1; }
   </style>
 </head>
 <body>
-  <h1>Мессенджер RP</h1>
+
+<h1>Мессенджер RP 2026</h1>
+
+<div class="auth-container">
   <input id="email" placeholder="Email">
   <input id="password" type="password" placeholder="Пароль">
-  <button id="registerBtn">Регистрация</button>
-  <button id="loginBtn">Войти</button>
+  <div style="display:flex; gap:10px;">
+    <button id="registerBtn">Регистрация</button>
+    <button id="loginBtn">Войти</button>
+  </div>
+</div>
 
-  <div id="chat">
-    <h2>Чат</h2>
-    <div id="messages"></div>
+<div id="chat">
+  <div id="messages"></div>
+  <div class="input-row">
     <input id="messageInput" placeholder="Введите сообщение">
     <button id="sendBtn">Отправить</button>
   </div>
+</div>
+
 </body>
 </html>
