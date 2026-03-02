@@ -2,44 +2,55 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>GhostRoom</title>
 
 <style>
+*{margin:0;padding:0;box-sizing:border-box}
+
 body{
-  margin:0;
   font-family:system-ui;
   background:#0f0f14;
   color:white;
+  height:100vh;
+  overflow:hidden;
 }
 
+/* ЭКРАНЫ */
 .screen{
   height:100vh;
   display:flex;
   flex-direction:column;
   justify-content:center;
   align-items:center;
+  padding:20px;
+  text-align:center;
 }
 
 input{
-  padding:12px;
-  margin:8px;
+  padding:14px;
+  margin:8px 0;
   border:none;
-  border-radius:15px;
-  width:250px;
+  border-radius:14px;
+  width:100%;
+  max-width:320px;
   background:#23233a;
   color:white;
+  font-size:16px;
 }
 
 button{
-  padding:10px 20px;
+  padding:12px 20px;
   border:none;
-  border-radius:20px;
+  border-radius:14px;
   background:#6d5dfc;
   color:white;
+  font-size:16px;
   cursor:pointer;
+  margin-top:5px;
 }
 
+/* ЧАТ */
 .chat{
   display:none;
   height:100vh;
@@ -47,96 +58,136 @@ button{
   flex-direction:column;
 }
 
+.topbar{
+  height:60px;
+  background:#171722;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:0 15px;
+  border-bottom:1px solid #26263a;
+  flex-shrink:0;
+}
+
 .messages{
   flex:1;
   overflow-y:auto;
   padding:15px;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
 }
 
 .message{
-  background:#23233a;
-  padding:10px;
-  border-radius:15px;
-  margin-bottom:10px;
+  max-width:75%;
+  padding:12px;
+  border-radius:18px;
   position:relative;
+  word-wrap:break-word;
+}
+
+.message.user{
+  align-self:flex-end;
+  background:#6d5dfc;
+}
+
+.message.other{
+  align-self:flex-start;
+  background:#23233a;
 }
 
 .message-header{
   display:flex;
   align-items:center;
-  gap:8px;
-  font-size:14px;
-  margin-bottom:5px;
+  gap:6px;
+  font-size:13px;
+  margin-bottom:6px;
 }
 
 .avatar{
-  width:25px;
-  height:25px;
+  width:22px;
+  height:22px;
   border-radius:50%;
 }
 
 .controls{
-  position:absolute;
-  right:10px;
-  top:10px;
   font-size:12px;
-  cursor:pointer;
-  opacity:0.6;
+  margin-top:6px;
+  opacity:0.7;
 }
 
 .controls span{
-  margin-left:5px;
+  margin-right:8px;
+  cursor:pointer;
 }
 
 .input-area{
   display:flex;
   padding:10px;
   background:#171722;
+  gap:8px;
+  border-top:1px solid #26263a;
+  flex-shrink:0;
 }
 
-.input-area input{
+.input-area input[type="text"]{
   flex:1;
+  margin:0;
+}
+
+.file-btn{
+  background:#23233a;
 }
 </style>
 </head>
 <body>
 
+<!-- LOGIN -->
 <div class="screen" id="login">
-  <h2>Введите пароль доступа 🔐</h2>
-  <input type="password" id="password" placeholder="Пароль">
+  <h2>🔐 Доступ в GhostRoom</h2>
+  <input type="password" id="password" placeholder="Введите пароль">
   <button onclick="enter()">Войти</button>
 </div>
 
+<!-- NICK -->
 <div class="screen" id="nicknameScreen" style="display:none">
-  <h2>Введите ник</h2>
-  <input type="text" id="nickname" placeholder="Ваш ник">
+  <h2>Ваш ник</h2>
+  <input type="text" id="nickname" placeholder="Введите ник">
   <button onclick="startChat()">Продолжить</button>
 </div>
 
+<!-- CHAT -->
 <div class="chat" id="chat">
+  <div class="topbar">
+    <h3>GhostRoom 👻</h3>
+    <span id="roleBadge"></span>
+  </div>
+
   <div class="messages" id="messages"></div>
 
   <div class="input-area">
+    <input type="file" id="fileInput" hidden>
+    <button class="file-btn" onclick="document.getElementById('fileInput').click()">📎</button>
     <input type="text" id="messageInput" placeholder="Сообщение...">
     <button onclick="sendMessage()">➤</button>
   </div>
 </div>
 
 <script>
-let role = "user";
-let avatar = "";
-let username = "Аноним";
+let role="user";
+let avatar="";
+let username="Аноним";
 
 function enter(){
-  const pass = document.getElementById("password").value;
+  const pass=document.getElementById("password").value;
 
-  if(pass === "Benjamin"){
-    role = "user";
-    avatar = "privacy-mask-icon-design-vector-260nw-1715757265.jpg";
+  if(pass==="Benjamin"){
+    role="user";
+    avatar="privacy-mask-icon-design-vector-260nw-1715757265.jpg";
   }
-  else if(pass === "Burmese"){
-    role = "admin";
-    avatar = "YetAnotherBot.jpg";
+  else if(pass==="Burmese"){
+    role="admin";
+    avatar="YetAnotherBot.jpg";
   }
   else{
     alert("Неверный пароль");
@@ -148,55 +199,103 @@ function enter(){
 }
 
 function startChat(){
-  const nickInput = document.getElementById("nickname").value;
-  if(nickInput.trim() !== ""){
-    username = nickInput;
-  }
+  const nick=document.getElementById("nickname").value.trim();
+  if(nick!=="") username=nick;
 
   document.getElementById("nicknameScreen").style.display="none";
   document.getElementById("chat").style.display="flex";
+
+  document.getElementById("roleBadge").innerText=
+    role==="admin" ? "👑 Admin" : "👤 User";
 }
 
 function sendMessage(){
-  const text = document.getElementById("messageInput").value;
-  if(!text.trim()) return;
+  const input=document.getElementById("messageInput");
+  const text=input.value.trim();
+  if(!text) return;
 
-  const msgDiv = document.createElement("div");
-  msgDiv.className = "message";
+  const msg=createMessageElement(text,null);
+  document.getElementById("messages").appendChild(msg);
 
-  msgDiv.innerHTML = `
+  input.value="";
+  scrollBottom();
+}
+
+document.getElementById("fileInput").addEventListener("change",function(e){
+  const file=e.target.files[0];
+  if(!file) return;
+
+  const reader=new FileReader();
+  reader.onload=function(event){
+    const msg=createMessageElement(null,{
+      name:file.name,
+      type:file.type,
+      data:event.target.result
+    });
+    document.getElementById("messages").appendChild(msg);
+    scrollBottom();
+  };
+  reader.readAsDataURL(file);
+});
+
+function createMessageElement(text,file){
+  const msg=document.createElement("div");
+  msg.className="message user";
+
+  let content="";
+
+  if(text){
+    content=`<div>${text}</div>`;
+  }
+
+  if(file){
+    if(file.type.startsWith("image/")){
+      content=`<img src="${file.data}" style="max-width:100%;border-radius:12px;">`;
+    }
+    else if(file.type.startsWith("video/")){
+      content=`<video controls style="max-width:100%;border-radius:12px;">
+                 <source src="${file.data}" type="${file.type}">
+               </video>`;
+    }
+    else if(file.type.startsWith("audio/")){
+      content=`<audio controls src="${file.data}"></audio>`;
+    }
+    else{
+      content=`<a href="${file.data}" download="${file.name}" style="color:white;text-decoration:underline;">
+               📎 ${file.name}</a>`;
+    }
+  }
+
+  msg.innerHTML=`
     <div class="message-header">
       <img src="${avatar}" class="avatar">
       <strong>${username}</strong>
-      ${role === "admin" ? "👑" : ""}
     </div>
-    <div class="message-text">${text}</div>
+    ${content}
     <div class="controls">
-      <span onclick="editMessage(this)">✏️</span>
+      <span onclick="editMessage(this)">✏</span>
       <span onclick="deleteMessage(this)">🗑</span>
     </div>
   `;
 
-  document.getElementById("messages").appendChild(msgDiv);
-  document.getElementById("messageInput").value="";
+  return msg;
 }
 
 function deleteMessage(el){
-  const message = el.closest(".message");
-  if(role === "admin"){
-    message.remove();
-  } else {
-    message.remove();
-  }
+  el.closest(".message").remove();
 }
 
 function editMessage(el){
-  const message = el.closest(".message");
-  const textDiv = message.querySelector(".message-text");
-  const newText = prompt("Редактировать сообщение:", textDiv.innerText);
-  if(newText !== null){
-    textDiv.innerText = newText;
-  }
+  const message=el.closest(".message");
+  const textDiv=message.querySelector("div:nth-child(2)");
+  if(!textDiv) return;
+  const newText=prompt("Редактировать:",textDiv.innerText);
+  if(newText!==null) textDiv.innerText=newText;
+}
+
+function scrollBottom(){
+  const box=document.getElementById("messages");
+  box.scrollTop=box.scrollHeight;
 }
 </script>
 
