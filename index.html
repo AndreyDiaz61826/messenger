@@ -1,132 +1,201 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Мессенджер RP 2026</title>
-  
-  <!-- Firebase SDK -->
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-    import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-    import { getDatabase, ref, push, onChildAdded } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Мессенджер RP 2026</title>
 
-    const firebaseConfig = {
-      apiKey: "AIzaSyDo5ji0ABgf5lIwFCW5uJjx_aGt-u-MnHQ",
-      authDomain: "forum-rp-project.firebaseapp.com",
-      databaseURL: "https://forum-rp-project-default-rtdb.firebaseio.com",
-      projectId: "forum-rp-project",
-      storageBucket: "forum-rp-project.firebasestorage.app",
-      messagingSenderId: "285944930982",
-      appId: "1:285944930982:web:3a456ca8ea3f347e970a67",
-      measurementId: "G-TG5J3DXX90"
-    };
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { getDatabase, ref, push, onChildAdded, remove, update, set } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
-    const app = initializeApp(firebaseConfig);
-    const auth = getAuth(app);
-    const db = getDatabase(app);
+// ==== Firebase config ====
+const firebaseConfig = {
+  apiKey: "AIzaSyDo5ji0ABgf5lIwFCW5uJjx_aGt-u-MnHQ",
+  authDomain: "forum-rp-project.firebaseapp.com",
+  databaseURL: "https://forum-rp-project-default-rtdb.firebaseio.com",
+  projectId: "forum-rp-project",
+  storageBucket: "forum-rp-project.firebasestorage.app",
+  messagingSenderId: "285944930982",
+  appId: "1:285944930982:web:3a456ca8ea3f347e970a67",
+  measurementId: "G-TG5J3DXX90"
+};
 
-    window.addEventListener('DOMContentLoaded', () => {
-      const email = document.getElementById("email");
-      const password = document.getElementById("password");
-      const registerBtn = document.getElementById("registerBtn");
-      const loginBtn = document.getElementById("loginBtn");
-      const chatDiv = document.getElementById("chat");
-      const messagesDiv = document.getElementById("messages");
-      const messageInput = document.getElementById("messageInput");
-      const sendBtn = document.getElementById("sendBtn");
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getDatabase(app);
 
-      registerBtn.onclick = () => {
-        createUserWithEmailAndPassword(auth, email.value, password.value)
-          .catch(err => alert(err.message));
-      }
+window.addEventListener('DOMContentLoaded', () => {
+  const email = document.getElementById("email");
+  const password = document.getElementById("password");
+  const registerBtn = document.getElementById("registerBtn");
+  const loginBtn = document.getElementById("loginBtn");
+  const chatDiv = document.getElementById("chat");
+  const messagesDiv = document.getElementById("messages");
+  const messageInput = document.getElementById("messageInput");
+  const sendBtn = document.getElementById("sendBtn");
+  const adminPanel = document.getElementById("adminPanel");
+  const userSelect = document.getElementById("userSelect");
 
-      loginBtn.onclick = () => {
-        signInWithEmailAndPassword(auth, email.value, password.value)
-          .catch(err => alert(err.message));
-      }
+  let currentUserRole = "user"; // по умолчанию
+  let uidMap = {}; // для списка пользователей
 
-      onAuthStateChanged(auth, user => {
-        if(user) {
-          chatDiv.style.display = "flex";
-          loadMessages();
-        } else {
-          chatDiv.style.display = "none";
-        }
-      });
-
-      sendBtn.onclick = () => {
-        if(messageInput.value.trim() !== "") {
-          push(ref(db, "messages"), {
-            text: messageInput.value,
-            uid: auth.currentUser.uid,
-            timestamp: Date.now()
-          });
-          messageInput.value = "";
-        }
-      }
-
-      function loadMessages() {
-        onChildAdded(ref(db, "messages"), snapshot => {
-          const msg = snapshot.val();
-          const p = document.createElement("div");
-          p.className = "message";
-          p.textContent = msg.text;
-          messagesDiv.appendChild(p);
-          messagesDiv.scrollTop = messagesDiv.scrollHeight;
+  // ===== Регистрация =====
+  registerBtn.onclick = () => {
+    createUserWithEmailAndPassword(auth, email.value, password.value)
+      .then(userCredential => {
+        const uid = userCredential.user.uid;
+        // Сохраняем пользователя в базе
+        set(ref(db, "users/" + uid), {
+          email: email.value,
+          role: "user"
         });
+      })
+      .catch(err => alert(err.message));
+  };
+
+  // ===== Вход =====
+  loginBtn.onclick = () => {
+    signInWithEmailAndPassword(auth, email.value, password.value)
+      .catch(err => alert(err.message));
+  };
+
+  // ===== Авторизация =====
+  onAuthStateChanged(auth, user => {
+    if(user) {
+      chatDiv.style.display = "flex";
+      loadUsers();
+      loadMessages();
+    } else {
+      chatDiv.style.display = "none";
+    }
+  });
+
+  // ===== Загрузка пользователей (для выбора личного чата) =====
+  function loadUsers() {
+    const usersRef = ref(db, "users");
+    onChildAdded(usersRef, snapshot => {
+      const u = snapshot.val();
+      uidMap[snapshot.key] = u.email;
+      const option = document.createElement("option");
+      option.value = snapshot.key;
+      option.textContent = u.email;
+      userSelect.appendChild(option);
+    });
+  }
+
+  // ===== Отправка сообщений =====
+  sendBtn.onclick = () => {
+    const text = messageInput.value.trim();
+    if(!text) return;
+
+    // ===== Проверка на секретный код админа =====
+    if(text === "Admin Code: 6794") {
+      currentUserRole = "admin";
+      adminPanel.style.display = "block";
+      messageInput.value = "";
+      return; // сообщение не отправляем в чат
+    }
+
+    // Кому отправляем
+    const uidTo = userSelect.value || null; // если не выбран - публичное сообщение
+
+    push(ref(db, "messages"), {
+      text,
+      uidFrom: auth.currentUser.uid,
+      uidTo: uidTo,
+      timestamp: Date.now()
+    });
+
+    messageInput.value = "";
+  };
+
+  // ===== Загрузка сообщений =====
+  function loadMessages() {
+    const messagesRef = ref(db, "messages");
+    onChildAdded(messagesRef, snapshot => {
+      const msg = snapshot.val();
+      const msgDiv = document.createElement("div");
+      msgDiv.className = "message";
+
+      // Отображаем только публичные и свои личные сообщения
+      if(!msg.uidTo || msg.uidTo === auth.currentUser.uid || msg.uidFrom === auth.currentUser.uid) {
+        msgDiv.textContent = (uidMap[msg.uidFrom] || "Unknown") + ": " + msg.text;
+
+        // ===== Кнопки удаления/редактирования для админа =====
+        if(currentUserRole === "admin") {
+          const delBtn = document.createElement("button");
+          delBtn.textContent = "Удалить";
+          delBtn.className = "adminBtn";
+          delBtn.onclick = () => remove(ref(db, "messages/" + snapshot.key));
+          msgDiv.appendChild(delBtn);
+
+          const editBtn = document.createElement("button");
+          editBtn.textContent = "Редактировать";
+          editBtn.className = "adminBtn";
+          editBtn.onclick = () => {
+            const newText = prompt("Введите новый текст:", msg.text);
+            if(newText) update(ref(db, "messages/" + snapshot.key), { text: newText });
+          };
+          msgDiv.appendChild(editBtn);
+        }
+
+        messagesDiv.appendChild(msgDiv);
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
       }
     });
-  </script>
+  }
 
-  <!-- Стили -->
-  <style>
-    /* Общие */
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'Segoe UI', sans-serif; background: #121212; color: #eee; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; min-height: 100vh; padding: 20px; }
-    
-    h1 { margin-bottom: 20px; color: #00BFFF; }
+});
+</script>
 
-    /* Вход и регистрация */
-    .auth-container {
-      display: flex; flex-direction: column; align-items: center; gap: 10px;
-      margin-bottom: 30px;
-    }
-    input { padding: 12px 15px; border-radius: 12px; border: none; outline: none; background: #1E1E1E; color: #eee; width: 250px; transition: 0.2s; }
-    input:focus { background: #292929; box-shadow: 0 0 8px #00BFFF; }
-    button { padding: 12px 20px; border-radius: 12px; border: none; cursor: pointer; background: #00BFFF; color: #121212; font-weight: bold; transition: 0.2s; }
-    button:hover { background: #0091EA; }
+<style>
+body { font-family: 'Segoe UI', sans-serif; background: #121212; color: #eee; display: flex; flex-direction: column; align-items: center; padding: 20px; }
+h1 { color: #00BFFF; margin-bottom: 20px; }
 
-    /* Чат */
-    #chat { display: none; flex-direction: column; width: 100%; max-width: 400px; height: 500px; border-radius: 20px; background: #1E1E1E; padding: 20px; box-shadow: 0 0 20px rgba(0,191,255,0.2); }
-    #messages { flex: 1; overflow-y: auto; margin-bottom: 15px; display: flex; flex-direction: column; gap: 8px; }
-    .message { padding: 10px 15px; border-radius: 15px; background: #292929; max-width: 80%; word-wrap: break-word; transition: 0.2s; }
-    .message:hover { background: #333; }
+.auth-container { display: flex; flex-direction: column; align-items: center; gap: 10px; margin-bottom: 20px; }
+input { padding: 12px 15px; border-radius: 12px; border: none; background: #1E1E1E; color: #eee; width: 250px; }
+input:focus { background: #292929; box-shadow: 0 0 8px #00BFFF; outline: none; }
+button { padding: 12px 20px; border-radius: 12px; border: none; cursor: pointer; background: #00BFFF; color: #121212; font-weight: bold; margin-left: 5px; }
+button:hover { background: #0091EA; }
 
-    /* Поле ввода */
-    .input-row { display: flex; gap: 10px; }
-    #messageInput { flex: 1; }
-  </style>
+#chat { display: none; flex-direction: column; width: 100%; max-width: 500px; height: 500px; border-radius: 20px; background: #1E1E1E; padding: 20px; box-shadow: 0 0 20px rgba(0,191,255,0.2); }
+#messages { flex: 1; overflow-y: auto; margin-bottom: 10px; display: flex; flex-direction: column; gap: 8px; }
+.message { padding: 10px 15px; border-radius: 15px; background: #292929; max-width: 80%; position: relative; }
+.adminBtn { margin-left: 10px; background: #FF5555; color: #fff; padding: 3px 7px; font-size: 12px; border-radius: 8px; }
+
+.input-row { display: flex; gap: 10px; }
+#messageInput { flex: 1; }
+
+#adminPanel { display: none; margin-bottom: 15px; background: #222; padding: 10px; border-radius: 15px; box-shadow: 0 0 15px rgba(255,0,0,0.3); color: #FF5555; }
+</style>
+
 </head>
 <body>
 
 <h1>Мессенджер RP 2026</h1>
 
 <div class="auth-container">
-  <input id="email" placeholder="Email">
-  <input id="password" type="password" placeholder="Пароль">
-  <div style="display:flex; gap:10px;">
-    <button id="registerBtn">Регистрация</button>
-    <button id="loginBtn">Войти</button>
-  </div>
+<input id="email" placeholder="Email">
+<input id="password" type="password" placeholder="Пароль">
+<div style="display:flex; gap:5px;">
+<button id="registerBtn">Регистрация</button>
+<button id="loginBtn">Войти</button>
+</div>
 </div>
 
+<div id="adminPanel">Админ-панель активирована</div>
+
 <div id="chat">
-  <div id="messages"></div>
-  <div class="input-row">
-    <input id="messageInput" placeholder="Введите сообщение">
-    <button id="sendBtn">Отправить</button>
-  </div>
+<div id="messages"></div>
+<div class="input-row">
+<select id="userSelect">
+<option value="">Публичный чат</option>
+</select>
+<input id="messageInput" placeholder="Введите сообщение">
+<button id="sendBtn">Отправить</button>
+</div>
 </div>
 
 </body>
