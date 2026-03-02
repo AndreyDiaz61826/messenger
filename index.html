@@ -8,7 +8,7 @@
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-import { getDatabase, ref, push, onChildAdded, remove, update, set, get, child } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+import { getDatabase, ref, push, onChildAdded, remove, update, set, get, child, query, orderByChild, equalTo } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
 // ===== Firebase Config =====
 const firebaseConfig = {
@@ -27,35 +27,44 @@ const auth = getAuth(app);
 const db = getDatabase(app);
 
 window.addEventListener('DOMContentLoaded', () => {
-
-  // ===== DOM Elements =====
   const email = document.getElementById("email");
   const password = document.getElementById("password");
   const registerBtn = document.getElementById("registerBtn");
   const loginBtn = document.getElementById("loginBtn");
+  const authContainer = document.getElementById("authContainer");
   const chatDiv = document.getElementById("chat");
   const messagesDiv = document.getElementById("messages");
   const messageInput = document.getElementById("messageInput");
   const sendBtn = document.getElementById("sendBtn");
   const adminPanel = document.getElementById("adminPanel");
   const contactsDiv = document.getElementById("contacts");
+  const searchInput = document.getElementById("searchInput");
+  const menuBtn = document.getElementById("menuBtn");
+  const menuPanel = document.getElementById("menuPanel");
+  const closeMenuBtn = document.getElementById("closeMenuBtn");
+  const nicknameInput = document.getElementById("nickname");
+  const usernameInput = document.getElementById("username");
+  const saveProfileBtn = document.getElementById("saveProfile");
 
   let currentUserRole = "user";
   let uidMap = {};
-  let currentChatUid = null; // uid выбранного чата
+  let currentChatUid = null;
+  let currentUser = null;
 
   // ===== Регистрация =====
   registerBtn.onclick = () => {
     createUserWithEmailAndPassword(auth, email.value, password.value)
       .then(userCredential => {
         const uid = userCredential.user.uid;
-        // создаем default avatar
+        currentUser = uid;
         const avatarUrl = `https://ui-avatars.com/api/?name=${encodeURIComponent(email.value)}&background=0D8ABC&color=fff`;
         set(ref(db, "users/" + uid), {
           email: email.value,
           role: "user",
           avatar: avatarUrl,
-          contacts: {}
+          contacts: {},
+          nickname: email.value.split("@")[0],
+          username: "@" + Math.floor(Math.random()*10000)
         });
       })
       .catch(err => alert(err.message));
@@ -70,10 +79,14 @@ window.addEventListener('DOMContentLoaded', () => {
   // ===== Авторизация =====
   onAuthStateChanged(auth, user => {
     if(user) {
+      currentUser = user.uid;
+      authContainer.style.display = "none";
       chatDiv.style.display = "flex";
       loadUsers();
       loadMessages();
+      loadProfile();
     } else {
+      authContainer.style.display = "flex";
       chatDiv.style.display = "none";
     }
   });
@@ -84,13 +97,29 @@ window.addEventListener('DOMContentLoaded', () => {
     onChildAdded(usersRef, snapshot => {
       const u = snapshot.val();
       uidMap[snapshot.key] = u;
+      renderContacts();
+    });
+  }
+
+  // ===== Поиск =====
+  searchInput.oninput = () => {
+    renderContacts(searchInput.value.trim().toLowerCase());
+  };
+
+  function renderContacts(filter="") {
+    contactsDiv.innerHTML = "";
+    const keys = Object.keys(uidMap);
+    keys.forEach(uid => {
+      const u = uidMap[uid];
+      if(uid === currentUser) return;
+      if(filter && (!u.username || !u.username.toLowerCase().includes(filter))) return;
 
       const contactDiv = document.createElement("div");
       contactDiv.className = "contact";
-      contactDiv.dataset.uid = snapshot.key;
-      contactDiv.innerHTML = `<img src="${u.avatar}" class="avatar"><span>${u.email}</span>`;
+      contactDiv.dataset.uid = uid;
+      contactDiv.innerHTML = `<img src="${u.avatar}" class="avatar"><div><b>${u.nickname}</b><br><small>${u.username}</small></div>`;
       contactDiv.onclick = () => {
-        currentChatUid = snapshot.key;
+        currentChatUid = uid;
         messagesDiv.innerHTML = "";
         loadMessages();
       };
@@ -103,32 +132,26 @@ window.addEventListener('DOMContentLoaded', () => {
     const text = messageInput.value.trim();
     if(!text) return;
 
-    // ===== Проверка на секретный код админа =====
     if(text === "Admin Code: 6794") {
       currentUserRole = "admin";
       adminPanel.style.display = "block";
       messageInput.value = "";
-      return; // сообщение не отправляем в чат
-    }
-
-    // Кому отправляем
-    let uidTo = currentChatUid;
-    if(uidTo === auth.currentUser.uid) {
-      alert("Нельзя отправлять себе сообщение!");
       return;
     }
 
+    let uidTo = currentChatUid || null;
+
     push(ref(db, "messages"), {
       text,
-      uidFrom: auth.currentUser.uid,
-      uidTo: uidTo, // null = публичный
+      uidFrom: currentUser,
+      uidTo: uidTo,
       timestamp: Date.now()
     });
 
-    // Добавляем в контакты обоих
+    // Добавление в контакты
     if(uidTo) {
-      set(ref(db, `users/${auth.currentUser.uid}/contacts/${uidTo}`), true);
-      set(ref(db, `users/${uidTo}/contacts/${auth.currentUser.uid}`), true);
+      set(ref(db, `users/${currentUser}/contacts/${uidTo}`), true);
+      set(ref(db, `users/${uidTo}/contacts/${currentUser}`), true);
     }
 
     messageInput.value = "";
@@ -136,47 +159,44 @@ window.addEventListener('DOMContentLoaded', () => {
 
   // ===== Загрузка сообщений =====
   function loadMessages() {
+    messagesDiv.innerHTML = "";
     const messagesRef = ref(db, "messages");
     onChildAdded(messagesRef, snapshot => {
       const msg = snapshot.val();
       const fromUser = uidMap[msg.uidFrom];
-
       if(!fromUser) return;
 
-      // Отображаем только сообщения с текущим чатом или публичные
       if((currentChatUid && (msg.uidFrom === currentChatUid || msg.uidTo === currentChatUid)) ||
          (!currentChatUid && !msg.uidTo) ||
-         msg.uidFrom === auth.currentUser.uid ||
-         msg.uidTo === auth.currentUser.uid) {
+         msg.uidFrom === currentUser ||
+         msg.uidTo === currentUser) {
 
         const msgDiv = document.createElement("div");
-        msgDiv.className = "message";
+        msgDiv.className = "message " + (msg.uidFrom===currentUser?"right":"left");
 
-        // аватар
         const avatarImg = document.createElement("img");
         avatarImg.src = fromUser.avatar;
-        avatarImg.className = "avatarMsg";
+        avatarImg.className = "msgAvatar";
 
         const textSpan = document.createElement("span");
         textSpan.textContent = msg.text;
+        textSpan.className = "msgText";
 
         msgDiv.appendChild(avatarImg);
         msgDiv.appendChild(textSpan);
 
-        // ===== Кнопки удаления/редактирования для админа =====
-        if(currentUserRole === "admin") {
+        if(currentUserRole==="admin"){
           const delBtn = document.createElement("button");
-          delBtn.textContent = "Удалить";
-          delBtn.className = "adminBtn";
-          delBtn.onclick = () => remove(ref(db, "messages/" + snapshot.key));
+          delBtn.textContent="Удалить";
+          delBtn.className="adminBtn";
+          delBtn.onclick = ()=>remove(ref(db,"messages/"+snapshot.key));
           msgDiv.appendChild(delBtn);
-
           const editBtn = document.createElement("button");
-          editBtn.textContent = "Редактировать";
-          editBtn.className = "adminBtn";
-          editBtn.onclick = () => {
-            const newText = prompt("Введите новый текст:", msg.text);
-            if(newText) update(ref(db, "messages/" + snapshot.key), { text: newText });
+          editBtn.textContent="Редактировать";
+          editBtn.className="adminBtn";
+          editBtn.onclick = ()=>{
+            const newText = prompt("Введите новый текст:",msg.text);
+            if(newText) update(ref(db,"messages/"+snapshot.key),{text:newText});
           };
           msgDiv.appendChild(editBtn);
         }
@@ -187,33 +207,72 @@ window.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // ===== Меню настроек =====
+  menuBtn.onclick = ()=>menuPanel.style.display="block";
+  closeMenuBtn.onclick = ()=>menuPanel.style.display="none";
+
+  // ===== Загрузка профиля =====
+  function loadProfile(){
+    const userRef = ref(db,"users/"+currentUser);
+    get(userRef).then(snapshot=>{
+      const data = snapshot.val();
+      nicknameInput.value=data.nickname||"";
+      usernameInput.value=data.username||"";
+    });
+  }
+
+  // ===== Сохранение профиля =====
+  saveProfileBtn.onclick=()=>{
+    const nick = nicknameInput.value.trim();
+    let uname = usernameInput.value.trim();
+    if(!nick||!uname) return alert("Введите оба поля");
+    if(uname[0]!=="@") uname = "@"+uname.slice(1);
+
+    // проверка уникальности username
+    const q = query(ref(db,"users"),orderByChild("username"),equalTo(uname));
+    get(q).then(snap=>{
+      if(snap.exists() && !Object.keys(snap.val()).includes(currentUser)){
+        return alert("Username занят!");
+      } else {
+        update(ref(db,"users/"+currentUser),{nickname:nick,username:uname});
+        alert("Профиль обновлён");
+        menuPanel.style.display="none";
+        loadUsers();
+      }
+    });
+  };
+
 });
 </script>
 
 <style>
-body { font-family: 'Segoe UI', sans-serif; background: #121212; color: #eee; display: flex; flex-direction: column; align-items: center; padding: 10px; }
-h1 { color: #00BFFF; margin-bottom: 10px; }
-
-.auth-container { display: flex; flex-direction: column; align-items: center; gap: 5px; margin-bottom: 10px; }
-input { padding: 10px 12px; border-radius: 12px; border: none; background: #1E1E1E; color: #eee; width: 200px; }
-input:focus { background: #292929; outline: none; box-shadow: 0 0 6px #00BFFF; }
-button { padding: 10px 15px; border-radius: 12px; border: none; cursor: pointer; background: #00BFFF; color: #121212; font-weight: bold; margin-left: 5px; }
-button:hover { background: #0091EA; }
-
-#chat { display: none; flex-direction: row; width: 100%; max-width: 900px; height: 500px; border-radius: 20px; background: #1E1E1E; box-shadow: 0 0 20px rgba(0,191,255,0.2); }
-#contacts { width: 200px; background: #1A1A1A; padding: 10px; border-right: 1px solid #333; overflow-y: auto; border-top-left-radius: 20px; border-bottom-left-radius: 20px; }
-.contact { display: flex; align-items: center; gap: 10px; padding: 5px; border-radius: 12px; cursor: pointer; }
-.contact:hover { background: #292929; }
-.contact .avatar { width: 35px; height: 35px; border-radius: 50%; }
-
-#messages { flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 10px; }
-.message { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 15px; background: #292929; position: relative; max-width: 80%; }
-.avatarMsg { width: 35px; height: 35px; border-radius: 50%; }
-.adminBtn { margin-left: 5px; background: #FF5555; color: #fff; padding: 3px 7px; font-size: 12px; border-radius: 8px; }
-
-.input-row { display: flex; gap: 10px; margin-top: 10px; }
-#messageInput { flex: 1; padding: 10px; border-radius: 12px; border: none; background: #1E1E1E; color: #eee; }
-#adminPanel { display: none; margin-bottom: 5px; padding: 5px 10px; background: #222; color: #FF5555; border-radius: 12px; box-shadow: 0 0 15px rgba(255,0,0,0.3); text-align: center; }
+body{font-family:'Segoe UI',sans-serif;margin:0;padding:0;background:#121212;color:#eee;height:100vh;display:flex;flex-direction:column;}
+h1{color:#00BFFF;margin:10px;text-align:center;}
+#authContainer{display:flex;flex-direction:column;align-items:center;gap:5px;margin-bottom:10px;padding-top:20px;}
+input{padding:10px;border-radius:12px;border:none;background:#1E1E1E;color:#eee;width:200px;}
+input:focus{outline:none;box-shadow:0 0 6px #00BFFF;}
+button{padding:10px 15px;border-radius:12px;border:none;cursor:pointer;background:#00BFFF;color:#121212;font-weight:bold;}
+button:hover{background:#0091EA;}
+#chat{display:none;flex:1;width:100%;max-width:900px;margin:auto;display:flex;overflow:hidden;border-radius:20px;background:#1E1E1E;box-shadow:0 0 20px rgba(0,191,255,0.2);}
+#contacts{width:240px;background:#1A1A1A;padding:10px;border-right:1px solid #333;overflow-y:auto;}
+.contact{display:flex;align-items:center;gap:10px;padding:5px;border-radius:12px;cursor:pointer;margin-bottom:5px;}
+.contact:hover{background:#292929;}
+.avatar{width:40px;height:40px;border-radius:50%;}
+#messages{flex:1;padding:10px;display:flex;flex-direction:column;gap:10px;overflow-y:auto;}
+.message{display:flex;align-items:flex-end;gap:10px;padding:8px 12px;border-radius:15px;max-width:80%;}
+.message.right{align-self:flex-end;flex-direction:row-reverse;}
+.msgAvatar{width:35px;height:35px;border-radius:50%;}
+.msgText{padding:8px 12px;border-radius:15px;background:#292929;max-width:70%;}
+.message.right .msgText{background:#00BFFF;color:#121212;}
+.adminBtn{margin-left:5px;background:#FF5555;color:#fff;padding:3px 7px;font-size:12px;border-radius:8px;}
+.input-row{display:flex;gap:10px;margin-top:auto;padding:10px;background:#1E1E1E;}
+#messageInput{flex:1;padding:10px;border-radius:12px;border:none;background:#292929;color:#eee;}
+#adminPanel{display:none;padding:5px 10px;background:#222;color:#FF5555;border-radius:12px;text-align:center;box-shadow:0 0 15px rgba(255,0,0,0.3);margin-bottom:5px;}
+#menuBtn{position:absolute;top:10px;left:10px;font-size:25px;cursor:pointer;color:#00BFFF;}
+#menuPanel{display:none;position:absolute;top:0;left:0;width:250px;height:100%;background:#1E1E1E;box-shadow:5px 0 15px rgba(0,0,0,0.5);padding:10px;z-index:100;}
+#closeMenuBtn{float:right;cursor:pointer;font-size:20px;color:#FF5555;}
+#menuPanel input{width:100%;margin-bottom:10px;}
+#searchInput{width:100%;padding:8px;margin-bottom:10px;border-radius:12px;border:none;background:#292929;color:#eee;}
 </style>
 
 </head>
@@ -221,10 +280,10 @@ button:hover { background: #0091EA; }
 
 <h1>RP Messenger 2026</h1>
 
-<div class="auth-container">
+<div id="authContainer">
 <input id="email" placeholder="Email">
 <input id="password" type="password" placeholder="Пароль">
-<div style="display:flex; gap:5px;">
+<div style="display:flex;gap:5px;">
 <button id="registerBtn">Регистрация</button>
 <button id="loginBtn">Войти</button>
 </div>
@@ -234,15 +293,26 @@ button:hover { background: #0091EA; }
 
 <div id="chat">
   <div id="contacts">
-    <div class="contact" data-uid=""><span>Публичный чат</span></div>
+    <input id="searchInput" placeholder="Поиск по username">
   </div>
-  <div style="flex:1; display:flex; flex-direction:column;">
+  <div style="flex:1;display:flex;flex-direction:column;">
     <div id="messages"></div>
     <div class="input-row">
       <input id="messageInput" placeholder="Введите сообщение">
       <button id="sendBtn">Отправить</button>
     </div>
   </div>
+</div>
+
+<div id="menuBtn">&#9776;</div>
+<div id="menuPanel">
+  <div id="closeMenuBtn">X</div>
+  <h3>Настройки аккаунта</h3>
+  <input id="nickname" placeholder="Ник">
+  <input id="username" placeholder="@username">
+  <button id="saveProfile">Сохранить</button>
+  <h3>Настройки чатов</h3>
+  <p>Здесь можно добавить темы, уведомления и др.</p>
 </div>
 
 </body>
