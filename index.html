@@ -2,23 +2,22 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>GhostRoom</title>
 
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 
-body{
+html,body{
+  height:100%;
   font-family:system-ui;
   background:#0f0f14;
   color:white;
-  height:100vh;
-  overflow:hidden;
 }
 
 /* ЭКРАНЫ */
 .screen{
-  height:100vh;
+  height:100%;
   display:flex;
   flex-direction:column;
   justify-content:center;
@@ -45,45 +44,56 @@ button{
   border-radius:14px;
   background:#6d5dfc;
   color:white;
-  font-size:16px;
+  font-size:15px;
   cursor:pointer;
-  margin-top:5px;
+  margin-top:6px;
 }
 
 /* ЧАТ */
 .chat{
   display:none;
-  height:100vh;
+  height:100%;
   display:flex;
   flex-direction:column;
 }
 
+/* Верх */
 .topbar{
-  height:60px;
+  height:55px;
   background:#171722;
   display:flex;
   align-items:center;
   justify-content:space-between;
-  padding:0 15px;
+  padding:0 12px;
   border-bottom:1px solid #26263a;
   flex-shrink:0;
 }
 
+.topbar .admin-controls button{
+  background:#23233a;
+  padding:6px 10px;
+  font-size:12px;
+  margin-left:5px;
+}
+
+/* Сообщения */
 .messages{
   flex:1;
   overflow-y:auto;
-  padding:15px;
+  padding:12px;
   display:flex;
   flex-direction:column;
-  gap:10px;
+  gap:8px;
 }
 
+/* Сообщение */
 .message{
-  max-width:75%;
-  padding:12px;
-  border-radius:18px;
-  position:relative;
+  max-width:80%;
+  padding:10px;
+  border-radius:16px;
   word-wrap:break-word;
+  background:#23233a;
+  align-self:flex-start;
 }
 
 .message.user{
@@ -91,52 +101,54 @@ button{
   background:#6d5dfc;
 }
 
-.message.other{
-  align-self:flex-start;
-  background:#23233a;
-}
-
 .message-header{
   display:flex;
   align-items:center;
   gap:6px;
   font-size:13px;
-  margin-bottom:6px;
+  margin-bottom:5px;
 }
 
 .avatar{
-  width:22px;
-  height:22px;
+  width:20px;
+  height:20px;
   border-radius:50%;
 }
 
 .controls{
   font-size:12px;
-  margin-top:6px;
+  margin-top:5px;
   opacity:0.7;
 }
 
 .controls span{
-  margin-right:8px;
+  margin-right:6px;
   cursor:pointer;
 }
 
+/* Ввод */
 .input-area{
   display:flex;
-  padding:10px;
+  padding:8px;
   background:#171722;
-  gap:8px;
+  gap:6px;
   border-top:1px solid #26263a;
   flex-shrink:0;
 }
 
 .input-area input[type="text"]{
   flex:1;
-  margin:0;
+  padding:12px;
+  border-radius:20px;
+  border:none;
+  background:#23233a;
+  color:white;
 }
 
 .file-btn{
   background:#23233a;
+  padding:0 12px;
+  border-radius:20px;
 }
 </style>
 </head>
@@ -144,7 +156,7 @@ button{
 
 <!-- LOGIN -->
 <div class="screen" id="login">
-  <h2>🔐 Доступ в GhostRoom</h2>
+  <h2>🔐 GhostRoom</h2>
   <input type="password" id="password" placeholder="Введите пароль">
   <button onclick="enter()">Войти</button>
 </div>
@@ -159,8 +171,10 @@ button{
 <!-- CHAT -->
 <div class="chat" id="chat">
   <div class="topbar">
-    <h3>GhostRoom 👻</h3>
-    <span id="roleBadge"></span>
+    <div>
+      <strong id="roomName">Комната 1 👻</strong>
+    </div>
+    <div class="admin-controls" id="adminControls"></div>
   </div>
 
   <div class="messages" id="messages"></div>
@@ -177,6 +191,7 @@ button{
 let role="user";
 let avatar="";
 let username="Аноним";
+let roomCount=1;
 
 function enter(){
   const pass=document.getElementById("password").value;
@@ -205,8 +220,12 @@ function startChat(){
   document.getElementById("nicknameScreen").style.display="none";
   document.getElementById("chat").style.display="flex";
 
-  document.getElementById("roleBadge").innerText=
-    role==="admin" ? "👑 Admin" : "👤 User";
+  if(role==="admin"){
+    document.getElementById("adminControls").innerHTML=`
+      <button onclick="clearChat()">Очистить</button>
+      <button onclick="newRoom()">Новый чат</button>
+    `;
+  }
 }
 
 function sendMessage(){
@@ -214,64 +233,23 @@ function sendMessage(){
   const text=input.value.trim();
   if(!text) return;
 
-  const msg=createMessageElement(text,null);
+  const msg=createMessage(text);
   document.getElementById("messages").appendChild(msg);
 
   input.value="";
   scrollBottom();
 }
 
-document.getElementById("fileInput").addEventListener("change",function(e){
-  const file=e.target.files[0];
-  if(!file) return;
-
-  const reader=new FileReader();
-  reader.onload=function(event){
-    const msg=createMessageElement(null,{
-      name:file.name,
-      type:file.type,
-      data:event.target.result
-    });
-    document.getElementById("messages").appendChild(msg);
-    scrollBottom();
-  };
-  reader.readAsDataURL(file);
-});
-
-function createMessageElement(text,file){
+function createMessage(text){
   const msg=document.createElement("div");
   msg.className="message user";
-
-  let content="";
-
-  if(text){
-    content=`<div>${text}</div>`;
-  }
-
-  if(file){
-    if(file.type.startsWith("image/")){
-      content=`<img src="${file.data}" style="max-width:100%;border-radius:12px;">`;
-    }
-    else if(file.type.startsWith("video/")){
-      content=`<video controls style="max-width:100%;border-radius:12px;">
-                 <source src="${file.data}" type="${file.type}">
-               </video>`;
-    }
-    else if(file.type.startsWith("audio/")){
-      content=`<audio controls src="${file.data}"></audio>`;
-    }
-    else{
-      content=`<a href="${file.data}" download="${file.name}" style="color:white;text-decoration:underline;">
-               📎 ${file.name}</a>`;
-    }
-  }
 
   msg.innerHTML=`
     <div class="message-header">
       <img src="${avatar}" class="avatar">
       <strong>${username}</strong>
     </div>
-    ${content}
+    <div>${text}</div>
     <div class="controls">
       <span onclick="editMessage(this)">✏</span>
       <span onclick="deleteMessage(this)">🗑</span>
@@ -286,11 +264,22 @@ function deleteMessage(el){
 }
 
 function editMessage(el){
-  const message=el.closest(".message");
-  const textDiv=message.querySelector("div:nth-child(2)");
-  if(!textDiv) return;
+  const msg=el.closest(".message");
+  const textDiv=msg.children[1];
   const newText=prompt("Редактировать:",textDiv.innerText);
   if(newText!==null) textDiv.innerText=newText;
+}
+
+function clearChat(){
+  if(confirm("Очистить весь чат?")){
+    document.getElementById("messages").innerHTML="";
+  }
+}
+
+function newRoom(){
+  roomCount++;
+  document.getElementById("messages").innerHTML="";
+  document.getElementById("roomName").innerText="Комната "+roomCount+" 👻";
 }
 
 function scrollBottom(){
